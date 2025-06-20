@@ -207,7 +207,9 @@
         const circumference = 2 * Math.PI * radius;
         progressRing.style.strokeDasharray = `${circumference} ${circumference}`;
 
+        // ---- MODIFIED STATE VARIABLES ----
         let timerInterval = null, timeRemaining = 0, totalDurationForPhase = 0, currentPhase = 'focus', focusSessionsCompleted = 0, currentSessionLabel = '';
+        let targetTime = 0; // NEW: To store the timestamp of when the timer should end
         let isTimerActive = false, isPaused = false;
         const notificationSound = new Audio('https://www.soundjay.com/buttons/sounds/button-16.mp3');
         
@@ -267,16 +269,35 @@
           setProgress(0);
         };
 
+        // ---- **** MAJOR CHANGE HERE **** ----
+        // This is the new, robust timer function that won't drift in background tabs.
         const runTimer = () => {
           if (timeRemaining <= 0) { nextPhase(); return; }
+
+          // Set the target end time based on the current time and remaining seconds.
+          targetTime = new Date().getTime() + timeRemaining * 1000;
+
           updateDisplay();
           updatePhaseLabel();
           updateTheme(currentPhase);
+          
+          // Clear any existing interval before starting a new one.
+          clearInterval(timerInterval);
+
           timerInterval = setInterval(() => {
-            timeRemaining--;
-            updateDisplay();
-            if (timeRemaining < 0) { notificationSound.play(); nextPhase(); }
-          }, 1000);
+            // Calculate remaining time by checking the difference between the target time and now.
+            const now = new Date().getTime();
+            timeRemaining = Math.round((targetTime - now) / 1000);
+
+            if (timeRemaining <= 0) {
+              timeRemaining = 0; // Clamp to zero to avoid showing negative time.
+              updateDisplay();
+              notificationSound.play();
+              nextPhase(); // nextPhase will clear this interval
+            } else {
+              updateDisplay();
+            }
+          }, 500); // Check every half-second for smoother updates when tab is active.
         };
         
         const nextPhase = () => {
@@ -285,7 +306,7 @@
           
           if (currentPhase === 'focus') {
               focusSessionsCompleted++;
-              if (settings.sessionCount === 1 || (settings.sessionCount > 1 && focusSessionsCompleted >= settings.sessionCount)) {
+              if (settings.sessionCount > 0 && focusSessionsCompleted >= settings.sessionCount) {
                   updatePhaseLabel(true);
                   setTimeout(() => handleStop(), 1500);
                   return;
@@ -302,8 +323,25 @@
           runTimer();
         };
 
-        const pauseTimer = () => { if (isTimerActive && !isPaused) { isPaused = true; clearInterval(timerInterval); pauseButton.classList.add('show'); }};
-        const resumeTimer = (e) => { e.stopPropagation(); if (isTimerActive && isPaused) { isPaused = false; pauseButton.classList.remove('show'); runTimer(); }};
+        const pauseTimer = () => { 
+          if (isTimerActive && !isPaused) { 
+            isPaused = true; 
+            clearInterval(timerInterval); 
+            // `timeRemaining` is already up-to-date from the last interval tick.
+            pauseButton.classList.add('show'); 
+          }
+        };
+
+        const resumeTimer = (e) => { 
+          e.stopPropagation(); 
+          if (isTimerActive && isPaused) { 
+            isPaused = false; 
+            pauseButton.classList.remove('show'); 
+            // The magic happens here: runTimer uses the saved `timeRemaining`
+            // to calculate a new `targetTime` and continue.
+            runTimer(); 
+          }
+        };
         
         const handleStart = () => {
           isTimerActive = true; isPaused = false;
@@ -323,7 +361,12 @@
           displayInitialState();
         };
         
-        const handleSkip = () => { if (!isTimerActive) return; isPaused = false; pauseButton.classList.remove('show'); nextPhase(); };
+        const handleSkip = () => { 
+            if (!isTimerActive) return; 
+            isPaused = false; 
+            pauseButton.classList.remove('show'); 
+            nextPhase(); 
+        };
 
         const autoSaveSettings = () => {
           settings = { prepare: parseInt(prepareInput.value) || 0, focus: parseInt(focusInput.value) || 25, shortBreak: parseInt(shortBreakInput.value) || 5, longBreak: parseInt(longBreakInput.value) || 15, sessionCount: parseInt(countInput.value) || 0, longBreakInterval: parseInt(intervalInput.value) || 0 };
@@ -338,7 +381,7 @@
         const showTimer = () => { settingsView.classList.add('hidden'); timerView.classList.remove('hidden'); if (isTimerActive) updateDisplay(); };
         
         const showLabelPopup = () => {
-            labelInput.value = currentSessionLabel; // Pre-fill with remembered value
+            labelInput.value = currentSessionLabel;
             labelOverlay.classList.add('show');
             labelInput.focus();
         };
