@@ -207,11 +207,14 @@
         const circumference = 2 * Math.PI * radius;
         progressRing.style.strokeDasharray = `${circumference} ${circumference}`;
 
-        // ---- MODIFIED STATE VARIABLES ----
         let timerInterval = null, timeRemaining = 0, totalDurationForPhase = 0, currentPhase = 'focus', focusSessionsCompleted = 0, currentSessionLabel = '';
-        let targetTime = 0; // NEW: To store the timestamp of when the timer should end
+        let targetTime = 0;
         let isTimerActive = false, isPaused = false;
-        const notificationSound = new Audio('https://www.soundjay.com/buttons/sounds/button-16.mp3');
+        
+        // ---- **** CHANGE HERE **** ----
+        // Swapped the external URL for your local file.
+        const notificationSound = new Audio('simple_ding.mp3');
+        notificationSound.preload = 'auto'; // Helps ensure the sound is ready to play.
         
         let settings = { prepare: 10, focus: 25, shortBreak: 5, longBreak: 15, sessionCount: 0, longBreakInterval: 4 };
         
@@ -268,36 +271,38 @@
           updatePhaseLabel();
           setProgress(0);
         };
-
-        // ---- **** MAJOR CHANGE HERE **** ----
-        // This is the new, robust timer function that won't drift in background tabs.
+        
         const runTimer = () => {
           if (timeRemaining <= 0) { nextPhase(); return; }
-
-          // Set the target end time based on the current time and remaining seconds.
           targetTime = new Date().getTime() + timeRemaining * 1000;
-
           updateDisplay();
           updatePhaseLabel();
           updateTheme(currentPhase);
           
-          // Clear any existing interval before starting a new one.
           clearInterval(timerInterval);
 
           timerInterval = setInterval(() => {
-            // Calculate remaining time by checking the difference between the target time and now.
             const now = new Date().getTime();
             timeRemaining = Math.round((targetTime - now) / 1000);
 
             if (timeRemaining <= 0) {
-              timeRemaining = 0; // Clamp to zero to avoid showing negative time.
+              timeRemaining = 0;
               updateDisplay();
-              notificationSound.play();
-              nextPhase(); // nextPhase will clear this interval
+              
+              // ---- **** IMPROVEMENT HERE **** ----
+              // This safely attempts to play the sound and ignores errors if the browser blocks it.
+              const playPromise = notificationSound.play();
+              if (playPromise !== undefined) {
+                  playPromise.catch(error => {
+                      console.error("Audio playback failed:", error);
+                  });
+              }
+
+              nextPhase();
             } else {
               updateDisplay();
             }
-          }, 500); // Check every half-second for smoother updates when tab is active.
+          }, 500);
         };
         
         const nextPhase = () => {
@@ -326,8 +331,7 @@
         const pauseTimer = () => { 
           if (isTimerActive && !isPaused) { 
             isPaused = true; 
-            clearInterval(timerInterval); 
-            // `timeRemaining` is already up-to-date from the last interval tick.
+            clearInterval(timerInterval);
             pauseButton.classList.add('show'); 
           }
         };
@@ -337,8 +341,6 @@
           if (isTimerActive && isPaused) { 
             isPaused = false; 
             pauseButton.classList.remove('show'); 
-            // The magic happens here: runTimer uses the saved `timeRemaining`
-            // to calculate a new `targetTime` and continue.
             runTimer(); 
           }
         };
