@@ -192,7 +192,7 @@
         <div class="label-input-container"><input type="text" id="labelInput" class="label-input" placeholder="Label this session"></div>
       </div>
     </div>
-    <script>
+       <script>
       document.addEventListener('DOMContentLoaded', () => {
         const timerView = document.getElementById('timer-view'), settingsView = document.getElementById('settings-view');
         const timerContentArea = document.getElementById('timerContentArea');
@@ -211,11 +211,32 @@
         let targetTime = 0;
         let isTimerActive = false, isPaused = false;
         
-        // ---- **** CHANGE HERE **** ----
-        // Swapped the external URL for your local file.
-        const notificationSound = new Audio('simple_ding.mp3');
-        notificationSound.preload = 'auto'; // Helps ensure the sound is ready to play.
-        
+        // ---- NEW AND IMPROVED AUDIO HANDLING ----
+        let notificationSound = null;
+        let isAudioUnlocked = false;
+
+        // Function to handle browser autoplay policies.
+        // It creates the audio object and "unlocks" it with a silent play/pause.
+        const unlockAudio = () => {
+            if (isAudioUnlocked) return; // Only run this once
+
+            // Make sure your audio file is in the same folder as your index.html
+            notificationSound = new Audio('./simple_ding.mp3'); 
+            notificationSound.preload = 'auto';
+            
+            // This is the trick: play and immediately pause.
+            const playPromise = notificationSound.play();
+            if (playPromise !== undefined) {
+                playPromise.then(() => {
+                    notificationSound.pause();
+                    console.log("Audio unlocked successfully.");
+                    isAudioUnlocked = true;
+                }).catch(error => {
+                    console.error("Audio unlock failed. The user may need to interact with the page again.", error);
+                });
+            }
+        };
+
         let settings = { prepare: 10, focus: 25, shortBreak: 5, longBreak: 15, sessionCount: 0, longBreakInterval: 4 };
         
         const formatTime = s => `${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
@@ -289,13 +310,10 @@
               timeRemaining = 0;
               updateDisplay();
               
-              // ---- **** IMPROVEMENT HERE **** ----
-              // This safely attempts to play the sound and ignores errors if the browser blocks it.
-              const playPromise = notificationSound.play();
-              if (playPromise !== undefined) {
-                  playPromise.catch(error => {
-                      console.error("Audio playback failed:", error);
-                  });
+              // Only play sound if it's unlocked AND the phase that just ended wasn't 'prepare'
+              if (isAudioUnlocked && currentPhase !== 'prepare') {
+                  notificationSound.currentTime = 0; // Rewind to start before playing
+                  notificationSound.play().catch(e => console.error("Could not play sound:", e));
               }
 
               nextPhase();
@@ -346,6 +364,9 @@
         };
         
         const handleStart = () => {
+          // ---- UNLOCK AUDIO ON FIRST CLICK ----
+          unlockAudio();
+
           isTimerActive = true; isPaused = false;
           focusSessionsCompleted = 0;
           currentSessionLabel = '';
@@ -365,6 +386,7 @@
         
         const handleSkip = () => { 
             if (!isTimerActive) return; 
+            unlockAudio(); // Also unlock audio if first action is a skip
             isPaused = false; 
             pauseButton.classList.remove('show'); 
             nextPhase(); 
