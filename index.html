@@ -192,7 +192,7 @@
         <div class="label-input-container"><input type="text" id="labelInput" class="label-input" placeholder="Label this session"></div>
       </div>
     </div>
-       <script>
+           <script>
       document.addEventListener('DOMContentLoaded', () => {
         const timerView = document.getElementById('timer-view'), settingsView = document.getElementById('settings-view');
         const timerContentArea = document.getElementById('timerContentArea');
@@ -211,20 +211,15 @@
         let targetTime = 0;
         let isTimerActive = false, isPaused = false;
         
-        // ---- NEW AND IMPROVED AUDIO HANDLING ----
         let notificationSound = null;
         let isAudioUnlocked = false;
 
-        // Function to handle browser autoplay policies.
-        // It creates the audio object and "unlocks" it with a silent play/pause.
         const unlockAudio = () => {
-            if (isAudioUnlocked) return; // Only run this once
+            if (isAudioUnlocked) return; 
 
-            // Make sure your audio file is in the same folder as your index.html
             notificationSound = new Audio('./simple_ding.mp3'); 
             notificationSound.preload = 'auto';
             
-            // This is the trick: play and immediately pause.
             const playPromise = notificationSound.play();
             if (playPromise !== undefined) {
                 playPromise.then(() => {
@@ -232,7 +227,7 @@
                     console.log("Audio unlocked successfully.");
                     isAudioUnlocked = true;
                 }).catch(error => {
-                    console.error("Audio unlock failed. The user may need to interact with the page again.", error);
+                    console.error("Audio unlock failed.", error);
                 });
             }
         };
@@ -310,8 +305,10 @@
               timeRemaining = 0;
               updateDisplay();
               
-              // Only play sound if it's unlocked AND the phase that just ended wasn't 'prepare'
-              if (isAudioUnlocked && currentPhase !== 'prepare') {
+              // ---- **** THE FIX IS HERE **** ----
+              // Removed the '&& currentPhase !== 'prepare'' condition.
+              // Now it will play after EVERY phase, as long as audio is unlocked.
+              if (isAudioUnlocked) {
                   notificationSound.currentTime = 0; // Rewind to start before playing
                   notificationSound.play().catch(e => console.error("Could not play sound:", e));
               }
@@ -364,7 +361,6 @@
         };
         
         const handleStart = () => {
-          // ---- UNLOCK AUDIO ON FIRST CLICK ----
           unlockAudio();
 
           isTimerActive = true; isPaused = false;
@@ -386,7 +382,7 @@
         
         const handleSkip = () => { 
             if (!isTimerActive) return; 
-            unlockAudio(); // Also unlock audio if first action is a skip
+            unlockAudio();
             isPaused = false; 
             pauseButton.classList.remove('show'); 
             nextPhase(); 
