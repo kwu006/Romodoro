@@ -192,7 +192,7 @@
         <div class="label-input-container"><input type="text" id="labelInput" class="label-input" placeholder="Label this session"></div>
       </div>
     </div>
-           <script>
+               <script>
       document.addEventListener('DOMContentLoaded', () => {
         const timerView = document.getElementById('timer-view'), settingsView = document.getElementById('settings-view');
         const timerContentArea = document.getElementById('timerContentArea');
@@ -213,23 +213,36 @@
         
         let notificationSound = null;
         let isAudioUnlocked = false;
-
+        
+        // ---- FINAL AUDIO HANDLING WITH ASYNC/AWAIT ----
+        // This function now returns a promise to signal when it's done.
         const unlockAudio = () => {
-            if (isAudioUnlocked) return; 
+          return new Promise((resolve, reject) => {
+            if (isAudioUnlocked) {
+              resolve(); // Already unlocked, we're done.
+              return;
+            }
 
             notificationSound = new Audio('./simple_ding.mp3'); 
             notificationSound.preload = 'auto';
             
             const playPromise = notificationSound.play();
             if (playPromise !== undefined) {
-                playPromise.then(() => {
-                    notificationSound.pause();
-                    console.log("Audio unlocked successfully.");
-                    isAudioUnlocked = true;
-                }).catch(error => {
-                    console.error("Audio unlock failed.", error);
-                });
+              playPromise.then(() => {
+                notificationSound.pause();
+                isAudioUnlocked = true;
+                console.log("Audio unlocked successfully.");
+                resolve(); // Signal that we are successfully unlocked.
+              }).catch(error => {
+                console.error("Audio unlock failed.", error);
+                reject(error); // Signal that there was a problem.
+              });
+            } else {
+              // For older browsers that don't return a promise.
+              isAudioUnlocked = true;
+              resolve();
             }
+          });
         };
 
         let settings = { prepare: 10, focus: 25, shortBreak: 5, longBreak: 15, sessionCount: 0, longBreakInterval: 4 };
@@ -305,11 +318,9 @@
               timeRemaining = 0;
               updateDisplay();
               
-              // ---- **** THE FIX IS HERE **** ----
-              // Removed the '&& currentPhase !== 'prepare'' condition.
-              // Now it will play after EVERY phase, as long as audio is unlocked.
+              // This logic is now correct because we know for sure the audio is unlocked.
               if (isAudioUnlocked) {
-                  notificationSound.currentTime = 0; // Rewind to start before playing
+                  notificationSound.currentTime = 0; 
                   notificationSound.play().catch(e => console.error("Could not play sound:", e));
               }
 
@@ -360,8 +371,14 @@
           }
         };
         
-        const handleStart = () => {
-          unlockAudio();
+        // ---- HANDLESTART IS NOW ASYNC ----
+        const handleStart = async () => {
+          try {
+            // This line now WAITS for the audio to be ready before continuing.
+            await unlockAudio();
+          } catch (error) {
+            console.error("Could not unlock audio, sounds will be disabled.");
+          }
 
           isTimerActive = true; isPaused = false;
           focusSessionsCompleted = 0;
@@ -380,9 +397,17 @@
           displayInitialState();
         };
         
-        const handleSkip = () => { 
+        // ---- HANDLESKIP IS NOW ASYNC ----
+        const handleSkip = async () => { 
             if (!isTimerActive) return; 
-            unlockAudio();
+            
+            try {
+              // Also wait for audio to unlock here, in case 'skip' is the first action.
+              await unlockAudio();
+            } catch(error) {
+              console.error("Could not unlock audio, sounds will be disabled.");
+            }
+
             isPaused = false; 
             pauseButton.classList.remove('show'); 
             nextPhase(); 
